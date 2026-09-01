@@ -7,9 +7,15 @@ requires-python = ">=3.12"
 dependencies = [
     "matplotlib>=3.11.1",
     "numpy>=2.5.2",
+    "torch>=2.13.0",
 ]
 
 [dependency-groups]
 dev = [
     "ipykernel>=7.3.0",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true

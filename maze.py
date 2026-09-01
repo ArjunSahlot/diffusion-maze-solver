@@ -20,12 +20,12 @@ def cell_neighbors(pos, grid_size):
     return list(map(tuple, ns[valid_mask]))
 
 
-def generate_maze(grid, start, rng):
-    grid_size = grid.shape[0]
+def generate_maze(grid_size, start, rng):
+    grid = np.zeros((grid_size, grid_size), dtype=int)
+    grid[start] = 1
     visited = set()
-    stack = []
+    stack = [start]
     visited.add(start)
-    stack.append(start)
 
     while stack:
         curr = stack.pop(-1)
