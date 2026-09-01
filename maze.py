@@ -11,7 +11,7 @@ from queue import PriorityQueue
 import numpy as np
 
 
-# Recursive backtracker (steps between cells, i.e. jumps of 2 pixels)
+# Recursive backtracker (jumps of 2 pixels)
 def cell_neighbors(pos, grid_size):
     dirs = np.array([[-2, 0], [0, -2], [0, 2], [2, 0]])
     ns = np.array(pos) + dirs
@@ -42,7 +42,7 @@ def generate_maze(grid, start, rng):
     return grid
 
 
-# A* pathfinding (steps between adjacent open pixels)
+# A* pathfinding (jumps of 1 pixel)
 def open_neighbors(grid, pos):
     grid_size = grid.shape[0]
     dirs = np.array([[-1, 0], [0, -1], [0, 1], [1, 0]])
