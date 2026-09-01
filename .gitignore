@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Windows download metadata (WSL)
+*Zone.Identifier
+
+# Generated figures
+samples.png
