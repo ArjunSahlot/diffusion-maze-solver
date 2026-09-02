@@ -21,10 +21,11 @@ class ResBlock(nn.Module):
         self.norm2 = nn.GroupNorm(8, out_ch)
         self.conv2 = nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1)
         self.skip = nn.Conv2d(in_ch, out_ch, kernel_size=1, padding=0) if in_ch != out_ch else nn.Identity()
+        self.time_proj = nn.Linear(time_dim, out_ch)
     
     def forward(self, x, temb):
         h = self.conv1(F.silu(self.norm1(x)))
-        h = h + temb[:, :, None, None]
+        h = h + self.time_proj(temb)[:, :, None, None]
         h = self.conv2(F.silu(self.norm2(h)))
         return h + self.skip(x)
 
@@ -38,7 +39,7 @@ class AttentionBlock(nn.Module):
     def forward(self, x):
         a = self.norm(x)
         b, c, h, w = x.shape
-        a = x.permute(0, 2, 3, 1).reshape(b, h * w, c)
+        a = a.permute(0, 2, 3, 1).reshape(b, h * w, c)
         a = self.attention(a, a, a)[0]
         a = a.reshape(b, h, w, c).permute(0, 3, 1, 2)
         return a + x
@@ -47,13 +48,14 @@ class AttentionBlock(nn.Module):
 class UNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.time_dim = 64
+        self.time_dim = 256
+        self.sinusoid_dim = 64
 
         # stem
         self.stem_conv = nn.Conv2d(3, 64, kernel_size=3, padding=1)
 
         self.time_mlp = nn.Sequential(
-            nn.Linear(self.stem_conv.out_channels, self.time_dim),
+            nn.Linear(self.sinusoid_dim, self.time_dim),
             nn.SiLU(),
             nn.Linear(self.time_dim, self.time_dim),
         )
@@ -91,7 +93,7 @@ class UNet(nn.Module):
 
 
     def forward(self, x, t):
-        temb = self.time_mlp(timestep_embedding(t, self.time_dim))
+        temb = self.time_mlp(timestep_embedding(t, self.sinusoid_dim))
 
         # stem
         x = self.stem_conv(x)

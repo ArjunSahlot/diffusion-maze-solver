@@ -99,13 +99,12 @@ def random_cells(grid_size, count, rng):
     return cells
 
 
-def get_samples(size: tuple[int, int], count, rng=np.random.default_rng(0)):
+def get_samples(count, grid_size, full_size, rng):
     """
     Get a (count, 3, full_size, full_size) shaped array of 'count' samples where the 3 channels represent one maze:
-    [0: walls, 1: endpoints, 2: path]. All values in [-1, 1]. If size > grid_size, the maze is
+    [0: walls, 1: endpoints, 2: path]. All values in [-1, 1]. If full_size > grid_size, the maze is
     centered and the surrounding padding is wall.
     """
-    full_size, grid_size = size
     off = (full_size - grid_size) // 2
     window = slice(off, off + grid_size)
 
@@ -123,3 +122,15 @@ def get_samples(size: tuple[int, int], count, rng=np.random.default_rng(0)):
         pr, pc = zip(*path)
         samples[i, 2, np.array(pr) + off, np.array(pc) + off] = 1
     return samples
+
+
+def parse_sample(sample):
+    """Inverse of get_samples for one (3, full_size, full_size) sample: returns (grid, path, start, stop) in
+    full_size coordinates, ready for check.is_valid_solution. Works on model output too once the path
+    channel has been thresholded to -1/1."""
+    walls, endpoints, path = sample
+    grid = (walls == -1).astype(int)
+    start = tuple(np.argwhere(endpoints == -1)[0])
+    stop = tuple(np.argwhere(endpoints == 1)[0])
+    path = list(map(tuple, np.argwhere(path == 1)))
+    return grid, path, start, stop

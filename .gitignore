@@ -222,3 +222,7 @@ __marimo__/
 
 # Generated figures
 samples.png
+
+# Cached maze pools and checkpoints
+data/
+*.pt
