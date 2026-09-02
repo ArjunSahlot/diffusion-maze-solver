@@ -99,21 +99,21 @@ def random_cells(grid_size, count, rng):
     return cells
 
 
-def get_samples(grid_size, count, rng, size=None):
+def get_samples(size: tuple[int, int], count, rng=np.random.default_rng(0)):
     """
-    Get a (count, 3, size, size) shaped array of 'count' samples where the 3 channels represent one maze:
+    Get a (count, 3, full_size, full_size) shaped array of 'count' samples where the 3 channels represent one maze:
     [0: walls, 1: endpoints, 2: path]. All values in [-1, 1]. If size > grid_size, the maze is
     centered and the surrounding padding is wall.
     """
-    size = grid_size if size is None else size
-    off = (size - grid_size) // 2
+    full_size, grid_size = size
+    off = (full_size - grid_size) // 2
     window = slice(off, off + grid_size)
 
     endpoints = [random_cells(grid_size, 2, rng) for _ in range(count)]
     grids = [generate_maze(grid_size, endpoints[i][0], rng) for i in range(count)]
     paths = [find_path(grids[i], endpoints[i][0], endpoints[i][1]) for i in range(count)]
 
-    samples = np.zeros((count, 3, size, size), dtype=np.float32)
+    samples = np.zeros((count, 3, full_size, full_size), dtype=np.float32)
     samples[:, 0] = 1  # wall
     samples[:, 2] = -1  # no path
     for i, g, (start, stop), path in zip(range(count), grids, endpoints, paths):
