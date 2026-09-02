@@ -3,7 +3,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from maze import find_path, generate_maze, random_cell
+from maze import find_path, generate_maze, random_cells
 
 WALL_COLOR = (0.13, 0.13, 0.16)
 PATH_COLOR = (0.31, 0.56, 0.97)
@@ -23,7 +23,7 @@ def to_rgb(grid, path, start, stop):
 
 def main():
     rng = np.random.default_rng()
-    grid_size = 21
+    grid_size = 23
     fig, axes = plt.subplots(4, 4, figsize=(10, 10))
 
     # Top half: corner-to-corner, bottom half: random endpoints
@@ -32,18 +32,12 @@ def main():
             start = (1, 1)
             stop = (grid_size - 2, grid_size - 2)
         else:
-            start = random_cell(grid_size, rng)
-            stop = random_cell(grid_size, rng)
-            while stop == start:
-                stop = random_cell(grid_size, rng)
+            start, stop = random_cells(grid_size, 2, rng)
 
-        grid = np.zeros((grid_size, grid_size))
-        grid[start] = 1
-        grid[stop] = 1
-        grid = generate_maze(grid, start, rng)
+        grid = generate_maze(grid_size, start, rng)
         path = find_path(grid, start, stop)
 
-        ax.imshow(to_rgb(grid, path, start, stop), interpolation="nearest")
+        ax.imshow(to_rgb(grid, path, start, stop), interpolation="nearest", cmap="gray")
         ax.set_axis_off()
 
     fig.tight_layout()

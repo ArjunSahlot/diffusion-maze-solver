@@ -87,6 +87,39 @@ def find_path(grid, start, stop):
     return False
 
 
-def random_cell(grid_size, rng):
-    """A random cell position (odd coordinates) within the grid."""
-    return tuple(1 + 2 * rng.integers(0, (grid_size - 1) // 2, size=2))
+def random_cells(grid_size, count, rng):
+    """Get 'count' non-overlapping random cells within the grid."""
+    if count > ((grid_size - 1) // 2) ** 2:
+        raise ValueError("Too many cells requested for the grid size")
+    cells = []
+    while len(cells) < count:
+        cell = tuple(1 + 2 * rng.integers(0, (grid_size - 1) // 2, size=2))
+        if cell not in cells:
+            cells.append(cell)
+    return cells
+
+
+def get_samples(grid_size, count, rng, size=None):
+    """
+    Get a (count, 3, size, size) shaped array of 'count' samples where the 3 channels represent one maze:
+    [0: walls, 1: endpoints, 2: path]. All values in [-1, 1]. If size > grid_size, the maze is
+    centered and the surrounding padding is wall.
+    """
+    size = grid_size if size is None else size
+    off = (size - grid_size) // 2
+    window = slice(off, off + grid_size)
+
+    endpoints = [random_cells(grid_size, 2, rng) for _ in range(count)]
+    grids = [generate_maze(grid_size, endpoints[i][0], rng) for i in range(count)]
+    paths = [find_path(grids[i], endpoints[i][0], endpoints[i][1]) for i in range(count)]
+
+    samples = np.zeros((count, 3, size, size), dtype=np.float32)
+    samples[:, 0] = 1  # wall
+    samples[:, 2] = -1  # no path
+    for i, g, (start, stop), path in zip(range(count), grids, endpoints, paths):
+        samples[i, 0, window, window] = 1 - g * 2
+        samples[i, 1, start[0] + off, start[1] + off] = -1
+        samples[i, 1, stop[0] + off, stop[1] + off] = 1
+        pr, pc = zip(*path)
+        samples[i, 2, np.array(pr) + off, np.array(pc) + off] = 1
+    return samples

@@ -2,16 +2,12 @@ from matplotlib import pyplot as plt
 import numpy as np
 import torch
 
-from maze import generate_maze, find_path, random_cell
-from visualize import to_rgb
+from maze import generate_maze, find_path, random_cells
 
 
 def path_image(size):
     rng = np.random.default_rng(0)
-    start = random_cell(size, rng)
-    stop = random_cell(size, rng)
-    while start == stop:
-        stop = random_cell(size, rng)
+    start, stop = random_cells(size, 2, rng)
 
     grid = generate_maze(size, start, rng)
     path = find_path(grid, start, stop)
@@ -24,7 +20,7 @@ def path_image(size):
 
 
 def main():
-    x0 = path_image(19).cuda()
+    x0 = path_image(23).cuda()
 
     # diffusion forward pass
     T = 1000
