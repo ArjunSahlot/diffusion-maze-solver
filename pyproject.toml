@@ -8,7 +8,7 @@ dependencies = [
     "gradio>=6.26.0",
     "matplotlib>=3.11.1",
     "numpy>=2.5.2",
-    "spaces>=0.51.3",
+    "spaces==0.51.1",
     "torch>=2.13.0",
     "tqdm>=4.70.0",
 ]
