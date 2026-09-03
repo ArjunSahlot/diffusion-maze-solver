@@ -96,7 +96,7 @@ def train(data, steps, batch_size, lr, heldout, eval_every=1000):
 
             if (step + 1) % eval_every == 0:
                 model.eval()
-                pbar.write(f"step {step + 1}: validity {validity_rate(model, heldout):.1%}")
+                pbar.write(f"step {step + 1}: validity {validity_rate(model, heldout):.1%} loss {loss.item():.4f}")
                 model.train()
     return model
 
