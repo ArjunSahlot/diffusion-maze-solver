@@ -33,23 +33,28 @@ def q_sample(x0, t, noise):
 
 
 @torch.no_grad()
+def sample_steps(model, state):
+    """Yield the model's path guess after each reverse diffusion step."""
+    x = torch.randn(state.shape[0], 1, *state.shape[2:], device=state.device)
+    for t in reversed(range(T)):
+        tt = torch.full((state.shape[0],), t, device=state.device)
+        eps = model(torch.cat([state, x], dim=1), tt)
+        x0_hat = (x - (1 - alpha_bar[t]).sqrt() * eps) / alpha_bar[t].sqrt()
+        mean = (x - betas[t] / (1 - alpha_bar[t]).sqrt() * eps) / alphas[t].sqrt()
+        x = mean + betas[t].sqrt() * torch.randn_like(x) if t > 0 else mean
+        yield t, x, x0_hat
+
+
+@torch.no_grad()
 def sample(model, state, record_every=None):
     """
     Reverse process: denoise pure noise into a path channel, conditioned on state (walls+endpoints).
     Also returns the model's running guess of the clean path every 'record_every' steps, for visualizing.
     """
-    x = torch.randn(state.shape[0], 1, *state.shape[2:], device=state.device)
     frames = []
-    for t in reversed(range(T)):
-        tt = torch.full((state.shape[0],), t, device=state.device)
-        eps = model(torch.cat([state, x], dim=1), tt)
-
+    for t, x, x0_hat in sample_steps(model, state):
         if record_every and t % record_every == 0:
-            x0_hat = (x - (1 - alpha_bar[t]).sqrt() * eps) / alpha_bar[t].sqrt()  # undo the whole crossfade at once
             frames.append((t, x0_hat.clamp(-1, 1)))
-
-        mean = (x - betas[t] / (1 - alpha_bar[t]).sqrt() * eps) / alphas[t].sqrt()
-        x = mean + betas[t].sqrt() * torch.randn_like(x) if t > 0 else mean
     return x, frames
 
 

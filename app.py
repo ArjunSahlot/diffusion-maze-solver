@@ -6,9 +6,9 @@ import numpy as np
 import torch
 
 import maze
-from diffusion import FULL_SIZE, GRID_SIZE, device, sample
+from diffusion import FULL_SIZE, GRID_SIZE, T, device, sample_steps
 from unet import UNet
-from visualize import to_rgb
+from visualize import GOAL_COLOR, PATH_COLOR, START_COLOR, WALL_COLOR, to_rgb
 
 
 model = UNet().to(device)
@@ -17,26 +17,68 @@ model.eval()
 rng = np.random.default_rng()
 
 
+def draw(example, prediction=None):
+    grid, _, start, stop = maze.parse_sample(example)
+    offset = (FULL_SIZE - GRID_SIZE) // 2
+    window = slice(offset, offset + GRID_SIZE)
+    grid = grid[window, window]
+    start = (start[0] - offset, start[1] - offset)
+    stop = (stop[0] - offset, stop[1] - offset)
+    image = to_rgb(grid, [], start, stop)
+
+    if prediction is not None:
+        prediction = prediction[window, window]
+        strength = ((np.clip(prediction, -1, 1) + 1) / 2)[..., None]
+        image = image * (1 - strength) + np.array(PATH_COLOR) * strength
+        image[start] = START_COLOR
+        image[stop] = GOAL_COLOR
+
+    padded = np.full((GRID_SIZE + 2, GRID_SIZE + 2, 3), WALL_COLOR)
+    padded[1:-1, 1:-1] = image
+    image = padded
+    return np.repeat(np.repeat(image, 16, axis=0), 16, axis=1)
+
+
+def new_maze():
+    example = maze.get_samples(1, GRID_SIZE, FULL_SIZE, rng)[0]
+    return example, draw(example), "Unsolved"
+
+
 @spaces.GPU(duration=10)
 @torch.inference_mode()
-def solve():
-    example = maze.get_samples(1, GRID_SIZE, FULL_SIZE, rng)[0]
-    state = torch.from_numpy(example[:2]).unsqueeze(0).to(device)
-    prediction, _ = sample(model, state)
-    path = torch.where(prediction[0] > 0, 1.0, -1.0).cpu().numpy()
+def solve(example):
+    if example is None:
+        example = maze.get_samples(1, GRID_SIZE, FULL_SIZE, rng)[0]
 
-    grid, path, start, stop = maze.parse_sample(np.concatenate([example[:2], path]))
-    image = to_rgb(grid, path, start, stop)
-    return np.repeat(np.repeat(image, 16, axis=0), 16, axis=1)
+    state = torch.from_numpy(example[:2]).unsqueeze(0).to(device)
+    for t, path, prediction in sample_steps(model, state):
+        if t == T - 1 or t % 25 == 0:
+            if t == 0:
+                prediction = torch.where(path[0, 0] > 0, 1.0, -1.0)
+            else:
+                prediction = prediction[0, 0]
+            yield draw(example, prediction.cpu().numpy()), "Solved" if t == 0 else f"t = {t}"
 
 
 with gr.Blocks(title="Diffusion maze solver") as demo:
     gr.Markdown("# Diffusion maze solver\nPathfinding through denoising.")
+    example = gr.State()
     output = gr.Image(show_label=False, interactive=False, container=False)
-    button = gr.Button("Solve another maze", variant="primary")
+    status = gr.Markdown("Unsolved")
 
-    demo.load(solve, outputs=output)
-    button.click(solve, outputs=output, api_name="solve")
+    with gr.Row():
+        new_button = gr.Button("New maze")
+        solve_button = gr.Button("Solve maze", variant="primary")
+
+    demo.load(new_maze, outputs=[example, output, status], show_progress="hidden")
+    solve_event = solve_button.click(solve, inputs=example, outputs=[output, status], api_name="solve")
+    new_button.click(
+        new_maze,
+        outputs=[example, output, status],
+        api_name="new_maze",
+        show_progress="hidden",
+        cancels=[solve_event],
+    )
 
 
 if __name__ == "__main__":

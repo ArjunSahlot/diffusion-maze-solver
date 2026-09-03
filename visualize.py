@@ -14,8 +14,9 @@ GOAL_COLOR = (0.91, 0.30, 0.24)
 def to_rgb(grid, path, start, stop):
     img = np.ones((*grid.shape, 3))
     img[grid == 0] = WALL_COLOR
-    rows, cols = zip(*path)
-    img[rows, cols] = PATH_COLOR
+    if path:
+        rows, cols = zip(*path)
+        img[rows, cols] = PATH_COLOR
     img[start] = START_COLOR
     img[stop] = GOAL_COLOR
     return img
