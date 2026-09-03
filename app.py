@@ -35,8 +35,7 @@ def draw(example, prediction=None):
 
     padded = np.full((GRID_SIZE + 2, GRID_SIZE + 2, 3), WALL_COLOR)
     padded[1:-1, 1:-1] = image
-    image = padded
-    return np.repeat(np.repeat(image, 16, axis=0), 16, axis=1)
+    return np.repeat(np.repeat(padded, 16, axis=0), 16, axis=1)
 
 
 def new_maze():
@@ -71,7 +70,13 @@ with gr.Blocks(title="Diffusion maze solver") as demo:
         solve_button = gr.Button("Solve maze", variant="primary")
 
     demo.load(new_maze, outputs=[example, output, status], show_progress="hidden")
-    solve_event = solve_button.click(solve, inputs=example, outputs=[output, status], api_name="solve")
+    solve_event = solve_button.click(
+        solve,
+        inputs=example,
+        outputs=[output, status],
+        api_name="solve",
+        show_progress="hidden",
+    )
     new_button.click(
         new_maze,
         outputs=[example, output, status],
