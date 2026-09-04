@@ -12,9 +12,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Spaces require YAML frontmatter at the top of README.md. Keep that
+      # metadata in HF_SPACE.yml so GitHub can render a normal README.
+      - name: Prepend Hugging Face Spaces frontmatter
+        run: |
+          {
+            cat HF_SPACE.yml
+            echo
+            cat README.md
+          } > /tmp/README.hf.md
+          mv /tmp/README.hf.md README.md
+
       - uses: huggingface/hub-sync@v0.1.0
         with:
           github_repo_id: ${{ github.repository }}
           huggingface_repo_id: ArjunSahlot/diffusion-maze-solver
           hf_token: ${{ secrets.HF_TOKEN }}
           space_sdk: gradio
+          exclude: |
+            HF_SPACE.yml
+            gif_studio/**

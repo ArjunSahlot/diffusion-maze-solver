@@ -1,16 +1,9 @@
----
-title: Diffusion Maze Solver
-emoji: 🌀
-colorFrom: gray
-colorTo: blue
-sdk: gradio
-sdk_version: 6.26.0
-python_version: "3.12.12"
-app_file: app.py
-pinned: false
-license: mit
----
+<p align="center">
+  <img src="assets/single.gif" alt="A maze solving itself by denoising" />
+</p>
 
 # diffusion-maze-solver
 
-Pathfinding through denoising
+Pathfinding through denoising.
+
+[Try it on Hugging Face Spaces](https://huggingface.co/spaces/ArjunSahlot/diffusion-maze-solver)
