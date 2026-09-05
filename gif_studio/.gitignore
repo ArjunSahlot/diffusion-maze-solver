@@ -1,0 +1,8 @@
+# Disposable studio artifacts: everything here is regenerated on demand.
+web/node_modules/
+web/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
+static/
+.cache/
+exports/
