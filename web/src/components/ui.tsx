@@ -5,13 +5,30 @@ import type { ReactNode } from "react";
 const base =
   "inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-colors duration-200 disabled:pointer-events-none disabled:opacity-35";
 
-type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" };
+type Tone = "clear" | "fill" | "fresh";
 
-export function Button({ variant = "secondary", className = "", ...props }: ButtonProps) {
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "secondary";
+  /** A quiet colour hint. Kept thin so the row still reads as one set of controls. */
+  tone?: Tone;
+};
+
+const tones: Record<Tone, string> = {
+  clear:
+    "border-[color-mix(in_oklch,var(--maze-goal)_38%,var(--line))] text-[color-mix(in_oklch,var(--maze-goal)_55%,var(--fg))] hover:bg-[color-mix(in_oklch,var(--maze-goal)_8%,transparent)] hover:border-[color-mix(in_oklch,var(--maze-goal)_55%,var(--line))]",
+  fill:
+    "border-[color-mix(in_oklch,var(--accent)_38%,var(--line))] text-[color-mix(in_oklch,var(--accent)_50%,var(--fg))] hover:bg-[color-mix(in_oklch,var(--accent)_8%,transparent)] hover:border-[color-mix(in_oklch,var(--accent)_55%,var(--line))]",
+  fresh:
+    "border-[color-mix(in_oklch,var(--maze-start)_38%,var(--line))] text-[color-mix(in_oklch,var(--maze-start)_50%,var(--fg))] hover:bg-[color-mix(in_oklch,var(--maze-start)_8%,transparent)] hover:border-[color-mix(in_oklch,var(--maze-start)_55%,var(--line))]",
+};
+
+export function Button({ variant = "secondary", tone, className = "", ...props }: ButtonProps) {
   const styles =
     variant === "primary"
       ? "bg-fg text-bg hover:bg-fg/88"
-      : "border border-line bg-bg text-fg hover:bg-surface hover:border-faint/40";
+      : tone
+        ? `border bg-bg ${tones[tone]}`
+        : "border border-line bg-bg text-fg hover:bg-surface hover:border-faint/40";
   return <button type="button" {...props} className={`${base} h-9 px-3.5 ${styles} ${className}`} />;
 }
 

@@ -9,6 +9,7 @@ import {
   decodePath,
   encodeState,
   findPath,
+  GRID,
   isValidSolution,
   openGrid,
   randomMaze,
@@ -22,7 +23,13 @@ import { Board, type Marker } from "./Board";
 import { Button, IconButton, Segmented, Select } from "./ui";
 
 type Tool = "wall" | "erase";
-type Puzzle = { grid: Grid; start: Cell; goal: Cell };
+type Puzzle = { grid: Grid; start: Cell; goal: Cell; drawn: Uint8Array };
+
+const blankDrawn = () => new Uint8Array(GRID * GRID);
+const withDrawn = (maze: { grid: Grid; start: Cell; goal: Cell }, drawn = blankDrawn()): Puzzle => ({
+  ...maze,
+  drawn,
+});
 type Result = { valid: boolean; length: number; shortest: number | null };
 
 const STEP_CHOICES = ["16", "32", "64"] as const;
@@ -49,7 +56,7 @@ const TOOLS: { value: Tool; label: string; title: string; glyph: React.ReactNode
 
 export function Playground() {
   // Seeded so the server and the client agree on the first maze; every later maze is random.
-  const [puzzle, setPuzzle] = useState<Puzzle>(() => randomMaze("backtracker", seededRandom(7)));
+  const [puzzle, setPuzzle] = useState<Puzzle>(() => withDrawn(randomMaze("backtracker", seededRandom(7))));
   const [history, setHistory] = useState<Puzzle[]>([]);
   const [future, setFuture] = useState<Puzzle[]>([]);
   const [tool, setTool] = useState<Tool>("wall");
@@ -125,8 +132,10 @@ export function Playground() {
       if (!erase && (sameCell(target, previous.start) || sameCell(target, previous.goal))) return previous;
       if (Boolean(previous.grid[at(r, c)]) === erase) return previous;
       const grid = Uint8Array.from(previous.grid);
+      const drawn = Uint8Array.from(previous.drawn);
       grid[at(r, c)] = erase ? 1 : 0;
-      return { ...previous, grid };
+      drawn[at(r, c)] = 1;
+      return { ...previous, grid, drawn };
     });
   }, []);
 
@@ -143,20 +152,31 @@ export function Playground() {
 
   const fill = useCallback(() => {
     record();
-    setPuzzle((previous) => ({ ...previous, grid: completeMaze(Uint8Array.from(previous.grid), algorithm) }));
+    setOffDistribution(algorithm !== "backtracker");
+    setFlagged(false);
+    setPuzzle((previous) => ({
+      ...previous,
+      grid: completeMaze(
+        Uint8Array.from(previous.grid),
+        algorithm,
+        Math.random,
+        [previous.start, previous.goal],
+        previous.drawn,
+      ),
+    }));
   }, [record, algorithm]);
 
   const shuffle = useCallback(() => {
     record();
     setOffDistribution(algorithm !== "backtracker");
     setFlagged(false);
-    setPuzzle(randomMaze(algorithm));
+    setPuzzle(withDrawn(randomMaze(algorithm)));
   }, [record, algorithm]);
 
   // Clearing knocks every wall down, leaving an open room to build back up from.
   const clear = useCallback(() => {
     record();
-    setPuzzle((previous) => ({ ...previous, grid: openGrid() }));
+    setPuzzle((previous) => ({ ...previous, grid: openGrid(), drawn: blankDrawn() }));
   }, [record]);
 
   const run = useCallback(() => {
@@ -274,7 +294,7 @@ export function Playground() {
         <IconButton onClick={redo} disabled={!future.length} title="Redo (⇧⌘Z)" aria-label="Redo">
           <Arrow flipped />
         </IconButton>
-        <Button onClick={clear} title="Wipe the board (C)">
+        <Button tone="clear" onClick={clear} title="Wipe the board (C)">
           Clear
         </Button>
       </div>
@@ -291,10 +311,10 @@ export function Playground() {
             title: note,
           }))}
         />
-        <Button onClick={fill} title="Complete the maze around what you drew (F)">
+        <Button tone="fill" onClick={fill} title="Complete the maze around what you drew (F)">
           Fill
         </Button>
-        <Button onClick={shuffle} title="Generate a whole new maze (N)">
+        <Button tone="fresh" onClick={shuffle} title="Generate a whole new maze (N)">
           New
         </Button>
       </div>

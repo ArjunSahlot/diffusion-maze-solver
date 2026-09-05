@@ -79,22 +79,6 @@ export const ALGORITHMS = {
 
 export type Algorithm = keyof typeof ALGORITHMS;
 
-/** Cells the drawing has already opened. These seed every generator. */
-function openedCells(grid: Grid): Set<number> {
-  const visited = new Set<number>();
-  for (let r = 1; r < GRID - 1; r += 2) {
-    for (let c = 1; c < GRID - 1; c += 2) {
-      if (grid[at(r, c)]) visited.add(at(r, c));
-    }
-  }
-  return visited;
-}
-
-const carve = (grid: Grid, from: number, to: number) => {
-  grid[(from + to) / 2] = 1;
-  grid[to] = 1;
-};
-
 const decode = (node: number): Cell => [Math.floor(node / GRID), node % GRID];
 
 function shuffle<T>(items: T[], rng: () => number): T[] {
@@ -105,63 +89,31 @@ function shuffle<T>(items: T[], rng: () => number): T[] {
   return items;
 }
 
-/** Start every growth-based generator from the drawing, or from one random cell. */
-function seed(grid: Grid, rng: () => number): Set<number> {
-  const visited = openedCells(grid);
-  if (visited.size === 0) {
-    const start = at(1 + 2 * Math.floor(rng() * CELLS), 1 + 2 * Math.floor(rng() * CELLS));
-    grid[start] = 1;
-    visited.add(start);
+/** One corridor between two neighboring cells on the odd-coordinate lattice. */
+type Edge = { a: number; b: number; mid: number };
+
+function cellNodes(): number[] {
+  const cells: number[] = [];
+  for (let r = 1; r < GRID - 1; r += 2) {
+    for (let c = 1; c < GRID - 1; c += 2) cells.push(at(r, c));
   }
-  return visited;
+  return cells;
 }
 
-/**
- * Recursive backtracker: always extend from the most recently reached cell, which is
- * what produces the long corridors of the training set. Whatever is already open counts
- * as visited, so a drawing is extended rather than overwritten.
- */
-function carveBacktracker(grid: Grid, rng: () => number): void {
-  const visited = seed(grid, rng);
-  // Shuffled so the growth front does not always start from the same corner.
-  const stack = shuffle([...visited], rng);
-
-  while (visited.size < CELLS * CELLS) {
-    while (stack.length) {
-      const current = stack[stack.length - 1];
-      const [r, c] = decode(current);
-      const unvisited = cellNeighbors(r, c).filter(([nr, nc]) => !visited.has(at(nr, nc)));
-      if (!unvisited.length) {
-        stack.pop();
-        continue;
-      }
-      const [nr, nc] = unvisited[Math.floor(rng() * unvisited.length)];
-      carve(grid, current, at(nr, nc));
-      visited.add(at(nr, nc));
-      stack.push(at(nr, nc));
-    }
-    // Unreachable on a connected lattice, but keeps the loop total if one is ever passed in.
-    for (let r = 1; r < GRID - 1 && visited.size < CELLS * CELLS; r += 2) {
-      for (let c = 1; c < GRID - 1; c += 2) {
-        if (!visited.has(at(r, c))) {
-          grid[at(r, c)] = 1;
-          visited.add(at(r, c));
-          stack.push(at(r, c));
-          break;
-        }
-      }
+function cellEdges(): Edge[] {
+  const edges: Edge[] = [];
+  for (let r = 1; r < GRID - 1; r += 2) {
+    for (let c = 1; c < GRID - 1; c += 2) {
+      if (c + 2 < GRID - 1) edges.push({ a: at(r, c), b: at(r, c + 2), mid: at(r, c + 1) });
+      if (r + 2 < GRID - 1) edges.push({ a: at(r, c), b: at(r + 2, c), mid: at(r + 1, c) });
     }
   }
+  return edges;
 }
 
-/**
- * The carve above grows outward from what was already open, so two separate drawings, or a
- * start and goal dropped onto a blank board, each end up with their own tree and no way
- * between them. This knocks down the fewest wall segments needed to make the maze one piece.
- */
-function joinComponents(grid: Grid, rng: () => number): void {
-  const parent = new Int32Array(GRID * GRID);
-  for (let i = 0; i < parent.length; i++) parent[i] = i;
+function unionFind(size: number) {
+  const parent = new Int32Array(size);
+  for (let i = 0; i < size; i++) parent[i] = i;
   const find = (node: number): number => {
     while (parent[node] !== node) node = parent[node] = parent[parent[node]];
     return node;
@@ -172,7 +124,311 @@ function joinComponents(grid: Grid, rng: () => number): void {
     parent[rb] = ra;
     return true;
   };
+  return { find, union };
+}
 
+/** A perfect maze is 121 open cells plus 120 corridors. More open than that is an unfinished room. */
+const TREE_OPEN = CELLS * CELLS + (CELLS * CELLS - 1);
+
+function openInterior(grid: Grid): number {
+  let open = 0;
+  for (let r = 1; r < GRID - 1; r++) {
+    for (let c = 1; c < GRID - 1; c++) if (grid[at(r, c)]) open++;
+  }
+  return open;
+}
+
+function neighborsOf(node: number): Edge[] {
+  const [r, c] = decode(node);
+  return cellNeighbors(r, c).map(([nr, nc]) => ({ a: node, b: at(nr, nc), mid: at((r + nr) / 2, (c + nc) / 2) }));
+}
+
+/**
+ * Spanning tree of the 11×11 cells. `forced` edges are already part of the drawing;
+ * `blocked` edges are walls the user placed and are only carved if the maze would
+ * otherwise stay in pieces.
+ */
+function spanningTree(algorithm: Algorithm, forced: Edge[], blocked: Set<number>, rng: () => number): Edge[] {
+  if (algorithm === "kruskal") return growKruskal(forced, blocked, rng);
+  if (algorithm === "prim") return growPrim(forced, blocked, rng);
+  return growBacktracker(forced, blocked, rng);
+}
+
+function growKruskal(forced: Edge[], blocked: Set<number>, rng: () => number): Edge[] {
+  const { union } = unionFind(GRID * GRID);
+  const tree: Edge[] = [];
+  for (const edge of forced) if (union(edge.a, edge.b)) tree.push(edge);
+  const preferred = shuffle(
+    cellEdges().filter((edge) => !blocked.has(edge.mid)),
+    rng,
+  );
+  const fallback = shuffle(
+    cellEdges().filter((edge) => blocked.has(edge.mid)),
+    rng,
+  );
+  for (const edge of preferred) if (union(edge.a, edge.b)) tree.push(edge);
+  for (const edge of fallback) if (union(edge.a, edge.b)) tree.push(edge);
+  return tree;
+}
+
+function growBacktracker(forced: Edge[], blocked: Set<number>, rng: () => number): Edge[] {
+  const { find, union } = unionFind(GRID * GRID);
+  const tree: Edge[] = [];
+  for (const edge of forced) if (union(edge.a, edge.b)) tree.push(edge);
+
+  const cells = cellNodes();
+  const visited = new Set<number>();
+  const stack: number[] = [];
+
+  // A forced corridor is a whole component: stepping onto one cell opens the rest of it.
+  const absorb = (node: number) => {
+    const root = find(node);
+    const members = cells.filter((cell) => find(cell) === root && !visited.has(cell));
+    for (const member of shuffle(members, rng)) {
+      visited.add(member);
+      stack.push(member);
+    }
+  };
+
+  absorb(cells[Math.floor(rng() * cells.length)]);
+
+  while (visited.size < cells.length) {
+    while (stack.length) {
+      const current = stack[stack.length - 1];
+      const options = neighborsOf(current).filter((edge) => !visited.has(edge.b));
+      const preferred = options.filter((edge) => !blocked.has(edge.mid));
+      if (!preferred.length) {
+        stack.pop();
+        continue;
+      }
+      const pick = preferred[Math.floor(rng() * preferred.length)];
+      union(current, pick.b);
+      tree.push(pick);
+      absorb(pick.b);
+    }
+    if (visited.size < cells.length) {
+      let pick: Edge | undefined;
+      let fallback: Edge | undefined;
+      for (const node of visited) {
+        for (const edge of neighborsOf(node)) {
+          if (visited.has(edge.b)) continue;
+          if (!blocked.has(edge.mid)) {
+            pick = edge;
+            break;
+          }
+          fallback ??= edge;
+        }
+        if (pick) break;
+      }
+      const edge = pick ?? fallback;
+      if (!edge) {
+        absorb(cells.find((cell) => !visited.has(cell))!);
+        continue;
+      }
+      union(edge.a, edge.b);
+      tree.push(edge);
+      absorb(edge.b);
+    }
+  }
+  return tree;
+}
+
+function growPrim(forced: Edge[], blocked: Set<number>, rng: () => number): Edge[] {
+  const { find, union } = unionFind(GRID * GRID);
+  const tree: Edge[] = [];
+  for (const edge of forced) if (union(edge.a, edge.b)) tree.push(edge);
+
+  const cells = cellNodes();
+  const visited = new Set<number>();
+  const absorb = (node: number) => {
+    const root = find(node);
+    for (const cell of cells) if (find(cell) === root) visited.add(cell);
+  };
+  absorb(cells[Math.floor(rng() * cells.length)]);
+
+  const frontier: Edge[] = [];
+  const extend = (node: number) => {
+    for (const edge of neighborsOf(node)) if (!visited.has(edge.b)) frontier.push(edge);
+  };
+  for (const node of visited) extend(node);
+
+  while (visited.size < cells.length) {
+    let live = 0;
+    for (const edge of frontier) if (!visited.has(edge.b)) frontier[live++] = edge;
+    frontier.length = live;
+    if (!frontier.length) {
+      let pick: Edge | undefined;
+      let fallback: Edge | undefined;
+      for (const node of visited) {
+        for (const edge of neighborsOf(node)) {
+          if (visited.has(edge.b)) continue;
+          if (!blocked.has(edge.mid)) {
+            pick = edge;
+            break;
+          }
+          fallback ??= edge;
+        }
+        if (pick) break;
+      }
+      const edge = pick ?? fallback;
+      if (!edge) break;
+      union(edge.a, edge.b);
+      tree.push(edge);
+      absorb(edge.b);
+      for (const cell of cells) if (visited.has(cell) && find(cell) === find(edge.b)) extend(cell);
+      continue;
+    }
+    const preferred = frontier.filter((edge) => !blocked.has(edge.mid));
+    const pool = preferred.length ? preferred : frontier;
+    const pick = pool[Math.floor(rng() * pool.length)];
+    frontier[frontier.indexOf(pick)] = frontier[frontier.length - 1];
+    frontier.pop();
+    if (visited.has(pick.b)) continue;
+    union(pick.a, pick.b);
+    tree.push(pick);
+    const before = visited.size;
+    absorb(pick.b);
+    if (visited.size > before) {
+      for (const cell of cells) if (visited.has(cell) && find(cell) === find(pick.b)) extend(cell);
+    }
+  }
+  return tree;
+}
+
+function paintTree(grid: Grid, tree: Edge[]): void {
+  for (let r = 1; r < GRID - 1; r++) {
+    for (let c = 1; c < GRID - 1; c++) grid[at(r, c)] = r % 2 === 1 && c % 2 === 1 ? 1 : 0;
+  }
+  for (const edge of tree) grid[edge.mid] = 1;
+}
+
+/** Endpoints can sit off the cell lattice after a drag; keep them on open ground. */
+function preserveEndpoints(grid: Grid, keep: Cell[]): void {
+  for (const [r, c] of keep) {
+    if (!isInterior(r, c)) continue;
+    grid[at(r, c)] = 1;
+    if (isCell(r, c)) continue;
+    const [sr, sc] = snapToCell(r, c);
+    grid[at(sr, sc)] = 1;
+  }
+}
+
+function userLocked(drawn: Uint8Array | undefined, grid: Grid) {
+  const blocked = new Set<number>();
+  const forbidden = new Set<number>();
+  if (!drawn) return { blocked, forbidden, any: false };
+  let any = false;
+  for (let i = 0; i < drawn.length; i++) {
+    if (!drawn[i]) continue;
+    any = true;
+    if (!grid[i]) {
+      blocked.add(i);
+      if (isCell(Math.floor(i / GRID), i % GRID)) forbidden.add(i);
+    }
+  }
+  return { blocked, forbidden, any };
+}
+
+function restoreDrawn(grid: Grid, snapshot: Grid, drawn: Uint8Array | undefined) {
+  if (!drawn) return;
+  for (let i = 0; i < drawn.length; i++) if (drawn[i]) grid[i] = snapshot[i];
+}
+
+/** Grow into still-walled cells without closing anything already open. */
+function carveInPlace(
+  grid: Grid,
+  algorithm: Algorithm,
+  rng: () => number,
+  blocked: Set<number>,
+  forbidden: Set<number>,
+): void {
+  const cells = cellNodes().filter((cell) => !forbidden.has(cell));
+  if (!cells.length) return;
+
+  if (algorithm === "kruskal") {
+    for (const cell of cells) grid[cell] = 1;
+    const { union } = unionFind(GRID * GRID);
+    for (const edge of cellEdges()) {
+      if (forbidden.has(edge.a) || forbidden.has(edge.b) || !grid[edge.mid]) continue;
+      union(edge.a, edge.b);
+    }
+    const usable = (edge: Edge) => !forbidden.has(edge.a) && !forbidden.has(edge.b);
+    for (const edge of shuffle(
+      cellEdges().filter((edge) => usable(edge) && !blocked.has(edge.mid)),
+      rng,
+    )) {
+      if (union(edge.a, edge.b)) grid[edge.mid] = 1;
+    }
+    for (const edge of shuffle(
+      cellEdges().filter((edge) => usable(edge) && blocked.has(edge.mid)),
+      rng,
+    )) {
+      if (union(edge.a, edge.b)) grid[edge.mid] = 1;
+    }
+    return;
+  }
+
+  const visited = new Set<number>();
+  for (const cell of cells) if (grid[cell]) visited.add(cell);
+  if (!visited.size) {
+    const start = cells[Math.floor(rng() * cells.length)];
+    grid[start] = 1;
+    visited.add(start);
+  }
+
+  const unused = (edge: Edge) => !visited.has(edge.b) && !forbidden.has(edge.b);
+
+  if (algorithm === "prim") {
+    const frontier: Edge[] = [];
+    const extend = (node: number) => {
+      for (const edge of neighborsOf(node)) if (unused(edge)) frontier.push(edge);
+    };
+    for (const node of visited) extend(node);
+    while (visited.size < cells.length && frontier.length) {
+      const prefer = frontier.filter((edge) => unused(edge) && !blocked.has(edge.mid));
+      const live = prefer.length ? prefer : frontier.filter(unused);
+      if (!live.length) break;
+      const pick = live[Math.floor(rng() * live.length)];
+      frontier[frontier.indexOf(pick)] = frontier[frontier.length - 1];
+      frontier.pop();
+      if (visited.has(pick.b) || forbidden.has(pick.b)) continue;
+      grid[pick.mid] = 1;
+      grid[pick.b] = 1;
+      visited.add(pick.b);
+      extend(pick.b);
+    }
+    return;
+  }
+
+  const stack = shuffle([...visited], rng);
+  while (visited.size < cells.length) {
+    while (stack.length) {
+      const current = stack[stack.length - 1];
+      const options = neighborsOf(current).filter((edge) => unused(edge) && !blocked.has(edge.mid));
+      if (!options.length) {
+        stack.pop();
+        continue;
+      }
+      const pick = options[Math.floor(rng() * options.length)];
+      grid[pick.mid] = 1;
+      grid[pick.b] = 1;
+      visited.add(pick.b);
+      stack.push(pick.b);
+    }
+    const next = cells.find((cell) => !visited.has(cell));
+    if (next === undefined) break;
+    grid[next] = 1;
+    visited.add(next);
+    stack.push(next);
+  }
+}
+
+/**
+ * Knock down the fewest remaining walls so open pixels are one piece. User-drawn
+ * walls are tried last, so a finishing fill does not punch through the sketch.
+ */
+function joinInPlace(grid: Grid, rng: () => number, blocked: Set<number>): void {
+  const { find, union } = unionFind(GRID * GRID);
   for (let r = 1; r < GRID - 1; r++) {
     for (let c = 1; c < GRID - 1; c++) {
       if (!grid[at(r, c)]) continue;
@@ -181,79 +437,66 @@ function joinComponents(grid: Grid, rng: () => number): void {
     }
   }
 
-  // Randomised Kruskal over the wall segments still standing between two cells.
-  const segments: [number, number, number][] = [];
-  for (let r = 1; r < GRID - 1; r += 2) {
-    for (let c = 1; c < GRID - 1; c += 2) {
-      if (c + 2 < GRID - 1) segments.push([at(r, c + 1), at(r, c), at(r, c + 2)]);
-      if (r + 2 < GRID - 1) segments.push([at(r + 1, c), at(r, c), at(r + 2, c)]);
-    }
-  }
-  for (const [middle, from, to] of shuffle(segments, rng)) {
-    if (union(from, to)) {
-      grid[middle] = 1;
-      union(middle, from);
-    }
-  }
-
-  // Every cell is now open and joined, so the only thing that can still be stranded is a
-  // junction the user opened by hand with four walls around it. Give each one a way out.
-  for (let r = 2; r < GRID - 1; r += 2) {
-    for (let c = 2; c < GRID - 1; c += 2) {
-      if (!grid[at(r, c)]) continue;
-      const around = STEP1.map(([dr, dc]) => [r + dr, c + dc] as Cell).filter(([nr, nc]) => isInterior(nr, nc));
-      if (around.some(([nr, nc]) => grid[at(nr, nc)])) continue;
-      const [nr, nc] = around[Math.floor(rng() * around.length)];
-      grid[at(nr, nc)] = 1;
-    }
-  }
-}
-
-/**
- * Randomised Prim: extend from a uniformly random cell on the frontier rather than the
- * newest one. Same spanning tree in the end, very different texture — short branches and
- * far more dead ends than anything the model saw in training.
- */
-function carvePrim(grid: Grid, rng: () => number): void {
-  const visited = seed(grid, rng);
-  const frontier: [number, number][] = [];
-  const extend = (node: number) => {
-    const [r, c] = decode(node);
-    for (const [nr, nc] of cellNeighbors(r, c)) {
-      if (!visited.has(at(nr, nc))) frontier.push([node, at(nr, nc)]);
-    }
+  const segments = cellEdges();
+  const openMid = (edge: Edge) => {
+    if (find(edge.a) === find(edge.b)) return;
+    if (!grid[edge.a] || !grid[edge.b]) return;
+    grid[edge.mid] = 1;
+    union(edge.a, edge.b);
+    union(edge.mid, edge.a);
   };
-  for (const node of visited) extend(node);
-
-  while (frontier.length && visited.size < CELLS * CELLS) {
-    const pick = Math.floor(rng() * frontier.length);
-    const [from, to] = frontier[pick];
-    frontier[pick] = frontier[frontier.length - 1];
-    frontier.pop();
-    if (visited.has(to)) continue;
-    carve(grid, from, to);
-    visited.add(to);
-    extend(to);
+  for (const edge of shuffle(
+    segments.filter((edge) => !blocked.has(edge.mid)),
+    rng,
+  )) {
+    openMid(edge);
+  }
+  for (const edge of shuffle(
+    segments.filter((edge) => blocked.has(edge.mid)),
+    rng,
+  )) {
+    openMid(edge);
   }
 }
 
 /**
- * Complete whatever is on the board into a single connected maze.
+ * Finish the board into a connected maze without throwing away the drawing.
  *
- * The chosen algorithm does the carving, then `joinComponents` guarantees the result is
- * one piece: without it, a start and a goal dropped on a blank board each grow their own
- * tree and the maze comes out unsolvable. Kruskal has no carve of its own — opening every
- * cell and letting the join build the spanning tree *is* randomised Kruskal.
+ * An empty open room (Clear, then Fill) still generates a maze. Once the human has
+ * painted, those pixels stay put: the algorithm only grows into remaining walls and
+ * joins whatever is disconnected. That is a finishing touch, not a new maze.
  */
 export function completeMaze(
   grid: Grid,
   algorithm: Algorithm = "backtracker",
   rng: () => number = Math.random,
+  keep: Cell[] = [],
+  drawn?: Uint8Array,
 ): Grid {
-  if (algorithm === "backtracker") carveBacktracker(grid, rng);
-  else if (algorithm === "prim") carvePrim(grid, rng);
-  else for (let r = 1; r < GRID - 1; r += 2) for (let c = 1; c < GRID - 1; c += 2) grid[at(r, c)] = 1;
-  joinComponents(grid, rng);
+  const { blocked, forbidden, any: drew } = userLocked(drawn, grid);
+  const snapshot = drawn ? Uint8Array.from(grid) : null;
+
+  if (!drew && openInterior(grid) > TREE_OPEN) {
+    paintTree(grid, spanningTree(algorithm, [], new Set(), rng));
+    preserveEndpoints(grid, keep);
+    return grid;
+  }
+
+  carveInPlace(grid, algorithm, rng, blocked, forbidden);
+  joinInPlace(grid, rng, blocked);
+  if (snapshot && drawn) restoreDrawn(grid, snapshot, drawn);
+  preserveEndpoints(grid, keep);
+
+  const [start, goal] = keep;
+  if (start && goal && !findPath(grid, start, goal)) {
+    joinInPlace(grid, rng, blocked);
+    if (snapshot && drawn) restoreDrawn(grid, snapshot, drawn);
+    preserveEndpoints(grid, keep);
+    if (!findPath(grid, start, goal)) {
+      joinInPlace(grid, rng, new Set());
+      preserveEndpoints(grid, keep);
+    }
+  }
   return grid;
 }
 
