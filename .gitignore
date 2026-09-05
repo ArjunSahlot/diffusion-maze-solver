@@ -227,3 +227,5 @@ samples.png
 data/
 
 gif_studio/
+.vercel
+.env*

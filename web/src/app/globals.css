@@ -1,60 +1,218 @@
 @import "tailwindcss";
 
-/*
- * A monochrome surface with a single accent. Colour is reserved for the one thing that
- * carries meaning here: the path the model is generating.
- */
+/* ---------------------------------------------------------------------------
+   Tokens
+   ---------------------------------------------------------------------------
+   Ported from @arjunsahlot/design (packages/design/styles/tokens.css) so this
+   subdomain reads as part of arjunsahlot.com. That package is private to its
+   own monorepo, so this is a copy rather than an import: if a token changes
+   there, change it here too.
+
+   Warm neutrals, never pure black or white. One accent — ember — used sparingly
+   enough that it still means something. The maze adds its own small palette,
+   because on the board colour is data rather than decoration.
+--------------------------------------------------------------------------- */
+
+@custom-variant dark (&:is(.dark *));
+
 :root {
-  --background: #ffffff;
-  --surface: #fafafa;
-  --foreground: #101010;
-  --muted: #6b7280;
-  --line: #e9e9e9;
-  --accent: #0072f5;
+  --bg: oklch(0.985 0.003 85);
+  --surface: oklch(0.955 0.005 85);
+  --fg: oklch(0.22 0.008 65);
+  --muted: oklch(0.53 0.008 70);
+  --faint: oklch(0.68 0.007 75);
+  --line: oklch(0.9 0.005 80);
+  --accent: oklch(0.58 0.14 52);
+  --selection: oklch(0.88 0.06 60);
+
+  /* The board. Corridors are always lighter than walls, in both themes, so a
+     maze never reads as a photographic negative of itself. */
+  --maze-open: oklch(0.995 0.002 85);
+  --maze-wall: oklch(0.26 0.01 60);
+  --maze-path: oklch(0.6 0.15 250);
+  --maze-start: oklch(0.6 0.15 152);
+  --maze-goal: oklch(0.57 0.19 25);
+  --maze-optimal: oklch(0.58 0.14 52);
+
+  --sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+  --serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --surface: #121212;
-    --foreground: #ededed;
-    --muted: #8f8f8f;
-    --line: #232323;
-    --accent: #52a8ff;
-  }
+.dark {
+  --bg: oklch(0.16 0.004 75);
+  --surface: oklch(0.212 0.005 75);
+  --fg: oklch(0.93 0.005 85);
+  --muted: oklch(0.68 0.007 80);
+  --faint: oklch(0.5 0.007 75);
+  --line: oklch(0.27 0.005 75);
+  --accent: oklch(0.78 0.13 62);
+  --selection: oklch(0.35 0.06 55);
+
+  --maze-open: oklch(0.305 0.007 75);
+  --maze-wall: oklch(0.125 0.004 75);
+  --maze-path: oklch(0.72 0.14 250);
+  --maze-start: oklch(0.74 0.14 152);
+  --maze-goal: oklch(0.68 0.17 25);
+  --maze-optimal: oklch(0.8 0.13 62);
 }
 
 @theme inline {
-  --color-background: var(--background);
+  --color-bg: var(--bg);
   --color-surface: var(--surface);
-  --color-foreground: var(--foreground);
+  --color-fg: var(--fg);
   --color-muted: var(--muted);
+  --color-faint: var(--faint);
   --color-line: var(--line);
   --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
+  --font-serif: var(--serif);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
-html {
-  color-scheme: light dark;
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    background: var(--bg);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
+    font-variant-ligatures: contextual;
+    text-rendering: optimizeLegibility;
+    transition:
+      background-color 0.4s var(--ease-out),
+      color 0.4s var(--ease-out);
+  }
+
+  ::selection {
+    background: var(--selection);
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    letter-spacing: -0.022em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  ::-moz-focus-inner {
+    border: 0;
+  }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
+/* Content arrives from slightly below, staggered by position. Nothing moves
+   more than 8px, and it stays opaque so first paint never waits on motion. */
+@keyframes rise {
+  from {
+    transform: translateY(8px);
+  }
+  to {
+    transform: none;
+  }
 }
 
-::selection {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
+@utility rise {
+  animation: rise 0.62s var(--ease-out) backwards;
+  animation-delay: calc(var(--step, 0) * 65ms + 40ms);
+}
+
+@utility link-quiet {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.25s var(--ease-out);
+
+  &:hover {
+    color: var(--fg);
+  }
+}
+
+/* The theme switch reveals the new colours as a circle growing from the
+   button. Both snapshots are held still; the clip-path is animated from JS. */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-group(root),
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-image-pair(root) {
+  isolation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+  display: block;
+}
+
+:root[data-theme-transition] * {
+  transition: none !important;
+}
+
+.theme-icon {
+  display: block;
+}
+
+.theme-icon-moon,
+.theme-icon-sun {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    opacity 0.2s var(--ease-out),
+    transform 0.3s var(--ease-out);
+}
+
+.theme-icon-sun {
+  opacity: 0;
+  transform: rotate(-30deg) scale(0.75);
+}
+
+.dark .theme-icon-moon {
+  opacity: 0;
+  transform: rotate(30deg) scale(0.75);
+}
+
+.dark .theme-icon-sun {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
 }
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

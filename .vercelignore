@@ -1,0 +1,17 @@
+# The site builds from web/ only. Everything below is either a build artefact, a
+# dependency the build reinstalls, or part of the Python training side of the repo —
+# none of it belongs in a deployment upload, and .venv alone is several gigabytes.
+.venv
+data
+gif_studio
+__pycache__
+node_modules
+.next
+assets
+*.pt
+*.npy
+*.ipynb
+samples.png
+
+# Mirrored out of node_modules by web/scripts/copy-ort.mjs during the build.
+web/public/ort
