@@ -6,6 +6,6 @@
 
 Pathfinding through denoising.
 
-[Try it through your webgpu](https://maze-diffusion.arjunsahlot.com)
+[Try it live](https://maze-diffusion.arjunsahlot.com)
 
 [Try it on Hugging Face Spaces](https://huggingface.co/spaces/ArjunSahlot/diffusion-maze-solver)
