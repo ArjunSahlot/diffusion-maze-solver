@@ -1,5 +1,5 @@
 """
-Export final_model.pt to ONNX for in-browser inference (web/public/model/unet.onnx).
+Export finalgeneral.pt to ONNX for in-browser inference (web/public/model/unet-general.onnx).
 
 The web playground runs the same U-Net client-side with onnxruntime-web, so the site stays
 fully static. Verifies the exported graph against PyTorch before writing.
@@ -13,7 +13,7 @@ import torch
 
 import unet
 
-DEFAULT_OUT = Path(__file__).with_name("web") / "public" / "model" / "unet.onnx"
+DEFAULT_OUT = Path(__file__).with_name("web") / "public" / "model" / "unet-general.onnx"
 
 
 def main(checkpoint, out):
@@ -48,6 +48,6 @@ def main(checkpoint, out):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint", type=Path, default=Path(__file__).with_name("final_model.pt"))
+    parser.add_argument("--checkpoint", type=Path, default=Path(__file__).with_name("finalgeneral.pt"))
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     main(**vars(parser.parse_args()))

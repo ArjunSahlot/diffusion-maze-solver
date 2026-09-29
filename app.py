@@ -6,13 +6,13 @@ import numpy as np
 import torch
 
 import maze
-from diffusion import FULL_SIZE, GRID_SIZE, T, device, sample_steps
+from diffusion import EVAL_ALGS, FULL_SIZE, GRID_SIZE, T, device, sample_steps
 from unet import UNet
 from visualize import GOAL_COLOR, PATH_COLOR, START_COLOR, WALL_COLOR, to_rgb
 
 
 model = UNet().to(device)
-model.load_state_dict(torch.load(Path(__file__).with_name("final_model.pt"), map_location=device, weights_only=True))
+model.load_state_dict(torch.load(Path(__file__).with_name("finalgeneral.pt"), map_location=device, weights_only=True))
 model.eval()
 rng = np.random.default_rng()
 
@@ -38,8 +38,8 @@ def draw(example, prediction=None):
     return np.repeat(np.repeat(padded, 16, axis=0), 16, axis=1)
 
 
-def new_maze():
-    example = maze.get_samples(1, GRID_SIZE, FULL_SIZE, rng)[0]
+def new_maze(alg):
+    example = maze.get_samples(1, GRID_SIZE, FULL_SIZE, rng, [alg])[0]
     return example, draw(example), "Unsolved"
 
 
@@ -64,12 +64,13 @@ with gr.Blocks(title="Diffusion maze solver") as demo:
     example = gr.State()
     output = gr.Image(show_label=False, interactive=False, container=False)
     status = gr.Markdown("Unsolved")
+    algorithm = gr.Dropdown(EVAL_ALGS, value="recursive_backtracker", label="Maze generator")
 
     with gr.Row():
         new_button = gr.Button("New maze")
         solve_button = gr.Button("Solve maze", variant="primary")
 
-    demo.load(new_maze, outputs=[example, output, status], show_progress="hidden")
+    demo.load(new_maze, inputs=algorithm, outputs=[example, output, status], show_progress="hidden")
     solve_event = solve_button.click(
         solve,
         inputs=example,
@@ -79,6 +80,7 @@ with gr.Blocks(title="Diffusion maze solver") as demo:
     )
     new_button.click(
         new_maze,
+        inputs=algorithm,
         outputs=[example, output, status],
         api_name="new_maze",
         show_progress="hidden",

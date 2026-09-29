@@ -23,7 +23,7 @@ jobs:
           } > /tmp/README.hf.md
           mv /tmp/README.hf.md README.md
 
-      - uses: huggingface/hub-sync@v0.1.0
+      - uses: huggingface/hub-sync@v0.3.0
         with:
           github_repo_id: ${{ github.repository }}
           huggingface_repo_id: ArjunSahlot/diffusion-maze-solver
@@ -32,3 +32,5 @@ jobs:
           exclude: |
             HF_SPACE.yml
             gif_studio/**
+            finalrb.pt
+            general.pt
