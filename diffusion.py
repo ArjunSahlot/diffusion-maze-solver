@@ -20,6 +20,10 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 GRID_SIZE = 23
 FULL_SIZE = 24
 
+# maze generators to train on, wilson is left out to measure generalization
+TRAIN_ALGS = ["recursive_backtracker", "prims", "kruskals", "ellers"]
+EVAL_ALGS = TRAIN_ALGS + ["wilson"]
+
 # noise schedule
 T = 1000
 betas = torch.linspace(0.0001, 0.02, T, device=device)
@@ -67,18 +71,23 @@ def validity_rate(model, samples):
     return np.mean([is_valid_solution(*maze.parse_sample(s)) for s in generated])
 
 
-def load_samples(name, count, seed):
+def validity_report(model, heldout):
+    """Validity on each held-out set, heldout maps a name to its samples"""
+    return " ".join(f"{name} {validity_rate(model, samples):.1%}" for name, samples in heldout.items())
+
+
+def load_samples(name, count, seed, algs):
     """Mazes take ~5ms each to generate, so pools are generated once and cached in data/"""
-    path = f"data/{name}_{count}.npy"
+    path = f"data/{name}_{'+'.join(algs)}_{count}.npy"
     if os.path.exists(path):
         return torch.from_numpy(np.load(path))
-    samples = maze.get_samples(count, GRID_SIZE, FULL_SIZE, np.random.default_rng(seed))
+    samples = maze.get_samples(count, GRID_SIZE, FULL_SIZE, np.random.default_rng(seed), algs)
     os.makedirs("data", exist_ok=True)
     np.save(path, samples)
     return torch.from_numpy(samples)
 
 
-def train(data, steps, batch_size, lr, heldout, eval_every=1000):
+def train(data, steps, batch_size, lr, heldout, eval_every=5000):
     model = unet.UNet().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     data = data.to(device)
@@ -101,7 +110,7 @@ def train(data, steps, batch_size, lr, heldout, eval_every=1000):
 
             if (step + 1) % eval_every == 0:
                 model.eval()
-                pbar.write(f"step {step + 1}: validity {validity_rate(model, heldout):.1%} loss {loss.item():.4f}")
+                pbar.write(f"step {step + 1}: loss {loss.item():.4f} validity {validity_report(model, heldout)}")
                 model.train()
     return model
 
@@ -114,20 +123,20 @@ if __name__ == "__main__":
 
     if args.overfit:
         data = torch.from_numpy(maze.get_samples(1, GRID_SIZE, FULL_SIZE, np.random.default_rng(0))).repeat(32, 1, 1, 1)
-        heldout = data
+        heldout = {"overfit": data}
         steps, batch_size, lr = args.steps or 1000, 32, 1e-3
     else:
-        data = load_samples("train", 20_000, seed=0)
-        heldout = load_samples("heldout", 256, seed=1)
+        data = load_samples("train", 20_000, seed=0, algs=TRAIN_ALGS)
+        heldout = {alg: load_samples("heldout", 256, seed=1, algs=[alg]) for alg in EVAL_ALGS}
         steps, batch_size, lr = args.steps or 20_000, 128, 2e-4
 
-    model = train(data, steps, batch_size, lr, heldout)
+    model = train(data, steps, batch_size, lr, heldout, eval_every=20001)
     model.eval()
     torch.save(model.state_dict(), "model.pt")
-    print(f"final validity: {validity_rate(model, heldout):.1%}")
+    print(f"final validity: {validity_report(model, heldout)}")
 
-    # watch the model solve one held-out maze: its running guess of the clean path, then the truth
-    truth = heldout[:1].to(device)
+    # preview model solution on wilson
+    truth = list(heldout.values())[-1][:1].to(device)
     x, frames = sample(model, truth[:, :2], record_every=100)
     fig, axes = plt.subplots(1, len(frames) + 1, figsize=(2 * (len(frames) + 1), 2.4))
     for ax, (t, frame) in zip(axes, frames):

@@ -11,7 +11,7 @@ from queue import PriorityQueue
 import numpy as np
 
 
-# Recursive backtracker (jumps of 2 pixels)
+# Maze generation algs
 def cell_neighbors(pos, grid_size):
     dirs = np.array([[-2, 0], [0, -2], [0, 2], [2, 0]])
     ns = np.array(pos) + dirs
@@ -20,7 +20,17 @@ def cell_neighbors(pos, grid_size):
     return list(map(tuple, ns[valid_mask]))
 
 
-def generate_maze(grid_size, start, rng):
+def carve(grid, a, b):
+    """Open neighboring cells a and b and the wall between them"""
+    grid[a] = grid[b] = 1
+    grid[(a[0] + b[0]) // 2, (a[1] + b[1]) // 2] = 1
+
+
+def all_cells(grid_size):
+    return [(r, c) for r in range(1, grid_size - 1, 2) for c in range(1, grid_size - 1, 2)]
+
+
+def recursive_backtracker(grid_size, start, rng):
     grid = np.zeros((grid_size, grid_size), dtype=int)
     grid[start] = 1
     visited = set()
@@ -40,6 +50,116 @@ def generate_maze(grid_size, start, rng):
             stack.append(chosen)
 
     return grid
+
+
+def prims(grid_size, start, rng):
+    """Randomized Prim's: every frontier edge gets a random priority, always open the cheapest one"""
+    grid = np.zeros((grid_size, grid_size), dtype=int)
+    grid[start] = 1
+    queue = PriorityQueue()
+    for n in cell_neighbors(start, grid_size):
+        queue.put((rng.random(), start, n))
+    while not queue.empty():
+        _, curr, chosen = queue.get()
+        if grid[chosen]:
+            continue
+        carve(grid, curr, chosen)
+        for n in cell_neighbors(chosen, grid_size):
+            if not grid[n]:
+                queue.put((rng.random(), chosen, n))
+    return grid
+
+
+def kruskals(grid_size, start, rng):
+    """Randomized Kruskal's: visit walls in random order, open one if it joins two separate regions"""
+    grid = np.zeros((grid_size, grid_size), dtype=int)
+    cells = all_cells(grid_size)
+    parent = {cell: cell for cell in cells}
+
+    def find(cell):
+        while parent[cell] != cell:
+            cell = parent[cell]
+        return cell
+
+    edges = [(a, b) for a in cells for b in cell_neighbors(a, grid_size) if a < b]
+    for i in rng.permutation(len(edges)):
+        a, b = edges[i]
+        root_a, root_b = find(a), find(b)
+        if root_a != root_b:
+            parent[root_a] = root_b
+            carve(grid, a, b)
+    return grid
+
+
+def ellers(grid_size, start, rng):
+    """Eller's: build row by row, randomly join neighbors in a row, then carry every region down at least once"""
+    grid = np.zeros((grid_size, grid_size), dtype=int)
+    rows = range(1, grid_size - 1, 2)
+    cols = range(1, grid_size - 1, 2)
+    region = list(range(len(cols)))  # region id of each cell in the current row
+    next_region = len(cols)
+
+    for r in rows:
+        last_row = r == rows[-1]
+        for i in range(len(cols) - 1):
+            # on the last row every separate region must be joined, otherwise it's a coin flip
+            if region[i] != region[i + 1] and (last_row or rng.random() < 0.5):
+                carve(grid, (r, cols[i]), (r, cols[i + 1]))
+                merged, kept = region[i + 1], region[i]
+                region = [kept if x == merged else x for x in region]
+        for i in range(len(cols)):
+            grid[r, cols[i]] = 1
+        if last_row:
+            break
+
+        below = [None] * len(cols)
+        for x in set(region):
+            members = [i for i in range(len(cols)) if region[i] == x]
+            for i in rng.choice(members, size=rng.integers(1, len(members) + 1), replace=False):
+                carve(grid, (r, cols[i]), (r + 2, cols[i]))
+                below[i] = x
+        for i in range(len(cols)):
+            if below[i] is None:
+                below[i] = next_region
+                next_region += 1
+        region = below
+    return grid
+
+
+def wilson(grid_size, start, rng):
+    """Wilson's: loop-erased random walks until they hit the maze, every possible maze is equally likely"""
+    grid = np.zeros((grid_size, grid_size), dtype=int)
+    grid[start] = 1
+    for cell in all_cells(grid_size):
+        # random walk until hitting the maze, remembering only the last exit taken from each cell (erases loops)
+        exit_to = {}
+        curr = cell
+        while not grid[curr]:
+            ns = cell_neighbors(curr, grid_size)
+            exit_to[curr] = ns[rng.integers(0, len(ns))]
+            curr = exit_to[curr]
+
+        path = [cell]
+        while path[-1] in exit_to:
+            path.append(exit_to[path[-1]])
+        for a, b in zip(path, path[1:]):
+            carve(grid, a, b)
+    return grid
+
+
+def generate_maze(grid_size, start, rng, alg="recursive_backtracker"):
+    if alg == "recursive_backtracker":
+        return recursive_backtracker(grid_size, start, rng)
+    elif alg == "prims":
+        return prims(grid_size, start, rng)
+    elif alg == "kruskals":
+        return kruskals(grid_size, start, rng)
+    elif alg == "ellers":
+        return ellers(grid_size, start, rng)
+    elif alg == "wilson":
+        return wilson(grid_size, start, rng)
+    else:
+        raise ValueError(f"Unknown maze generation algorithm: {alg}")
 
 
 # A* pathfinding (jumps of 1 pixel)
@@ -99,17 +219,17 @@ def random_cells(grid_size, count, rng):
     return cells
 
 
-def get_samples(count, grid_size, full_size, rng):
+def get_samples(count, grid_size, full_size, rng, algs=("recursive_backtracker",)):
     """
     Get a (count, 3, full_size, full_size) shaped array of 'count' samples where the 3 channels represent one maze:
     [0: walls, 1: endpoints, 2: path]. All values in [-1, 1]. If full_size > grid_size, the maze is
-    centered and the surrounding padding is wall.
+    centered and the surrounding padding is wall. Each maze uses a generator picked uniformly from 'algs'.
     """
     off = (full_size - grid_size) // 2
     window = slice(off, off + grid_size)
 
     endpoints = [random_cells(grid_size, 2, rng) for _ in range(count)]
-    grids = [generate_maze(grid_size, endpoints[i][0], rng) for i in range(count)]
+    grids = [generate_maze(grid_size, endpoints[i][0], rng, algs[rng.integers(0, len(algs))]) for i in range(count)]
     paths = [find_path(grids[i], endpoints[i][0], endpoints[i][1]) for i in range(count)]
 
     samples = np.zeros((count, 3, full_size, full_size), dtype=np.float32)
