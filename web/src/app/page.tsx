@@ -8,8 +8,8 @@ const SPACE = "https://huggingface.co/spaces/ArjunSahlot/diffusion-maze-solver";
 const FACTS = [
   ["Architecture", "U-Net, 5,218,561 parameters"],
   ["Board", "23 × 23 pixels, an 11 × 11 cell maze"],
-  ["Training set", "20,000 mazes carved by recursive backtracker, solved by A*"],
-  ["Solve rate", "94.1% of 256 held-out mazes, against 94.5% using all 1000 steps"],
+  ["Training set", "20,000 mazes from four generators, then 20,000 recursive backtracker to finetune, solved by A*"],
+  ["Solve rate", "97.0% of 1,280 held-out mazes from five generators (one never trained on), against 97.7% using all 1000 steps"],
   ["Inference", "onnxruntime-web, WebGPU with a WebAssembly fallback. Nothing you draw leaves the tab."],
 ];
 

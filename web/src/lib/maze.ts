@@ -65,7 +65,7 @@ function cellNeighbors(r: number, c: number): Cell[] {
 export const ALGORITHMS = {
   backtracker: {
     label: "Recursive backtracker",
-    note: "Long winding corridors and few junctions. The only kind of maze the model was trained on.",
+    note: "Long winding corridors and few junctions. The hardest style for the model, with the longest paths.",
   },
   prim: {
     label: "Randomised Prim",

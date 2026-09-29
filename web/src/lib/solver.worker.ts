@@ -33,7 +33,7 @@ let session: Promise<ort.InferenceSession> | null = null;
 let cancelled = false;
 
 async function fetchModel(): Promise<ArrayBuffer> {
-  const response = await fetch("/model/unet.onnx");
+  const response = await fetch("/model/unet-general.onnx");
   if (!response.ok) throw new Error(`could not load the model (${response.status})`);
   const total = Number(response.headers.get("content-length")) || 0;
   if (!response.body) return response.arrayBuffer();

@@ -64,8 +64,8 @@ export function Playground() {
   const [steps, setSteps] = useState(32);
   const [result, setResult] = useState<Result | null>(null);
   const [showOptimal, setShowOptimal] = useState(false);
-  // The model only ever saw recursive-backtracker mazes, so anything drawn by hand or laid
-  // out by another generator is off-distribution and worth saying so before it disappoints.
+  // The model was trained on generated mazes, so anything drawn by hand is off-distribution
+  // and worth saying so before it disappoints.
   const [offDistribution, setOffDistribution] = useState(false);
   const [flagged, setFlagged] = useState(false);
 
@@ -152,7 +152,7 @@ export function Playground() {
 
   const fill = useCallback(() => {
     record();
-    setOffDistribution(algorithm !== "backtracker");
+    setOffDistribution(false);
     setFlagged(false);
     setPuzzle((previous) => ({
       ...previous,
@@ -168,7 +168,7 @@ export function Playground() {
 
   const shuffle = useCallback(() => {
     record();
-    setOffDistribution(algorithm !== "backtracker");
+    setOffDistribution(false);
     setFlagged(false);
     setPuzzle(withDrawn(randomMaze(algorithm)));
   }, [record, algorithm]);
@@ -263,8 +263,8 @@ export function Playground() {
         <p className="flex items-start gap-2.5 rounded-lg border border-line bg-surface px-3 py-2.5 text-[0.8125rem] leading-5 text-muted">
           <span aria-hidden className="mt-[0.4rem] size-1.5 shrink-0 rounded-full bg-accent" />
           <span>
-            This board was drawn or laid out by another generator. The model was only ever trained on
-            recursive-backtracker mazes, so it will often fail here.
+            This board was drawn by hand. The model was only ever trained on generated mazes, so loops,
+            open rooms and stray walls can still trip it up.
           </span>
         </p>
       )}

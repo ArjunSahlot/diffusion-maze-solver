@@ -18,13 +18,14 @@ npm run dev
 
 ## The model
 
-`public/model/unet.onnx` is exported from `final_model.pt` by the script one level up:
+`public/model/unet-general.onnx` is exported from `finalgeneral.pt` by the script one level up (on `main`):
 
 ```bash
-python export_onnx.py
+python export_onnx.py --checkpoint finalgeneral.pt --out web/public/model/unet-general.onnx
 ```
 
-The export is verified against PyTorch before it is written. Sampling uses DDIM at eta = 1 over a
+Browsers cache `/model/*` as immutable, so a new model needs a new filename, with the fetch in
+`src/lib/solver.worker.ts` updated to match. The export is verified against PyTorch before it is written. Sampling uses DDIM at eta = 1 over a
 strided subset of the 1000 trained timesteps: 32 steps reproduce the full sampler's solve rate at
 a thirtieth of the compute, which is what makes running this in a tab reasonable.
 

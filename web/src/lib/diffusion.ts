@@ -4,7 +4,7 @@
  * Training used a 1000-step linear beta schedule. Sampling here walks a strided subset of
  * those timesteps with the DDIM update at eta = 1, which is the same ancestral step the
  * original sampler takes but over far fewer model evaluations: 32 steps reproduce the
- * 1000-step solve rate (~94% on held-out mazes) at ~30x less compute, which is what makes
+ * 1000-step solve rate (~97% on held-out mazes) at ~30x less compute, which is what makes
  * running the model in a browser tab practical.
  */
 
