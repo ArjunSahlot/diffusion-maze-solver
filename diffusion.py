@@ -87,8 +87,8 @@ def load_samples(name, count, seed, algs):
     return torch.from_numpy(samples)
 
 
-def train(data, steps, batch_size, lr, heldout, eval_every=5000):
-    model = unet.UNet().to(device)
+def train(data, steps, batch_size, lr, heldout, eval_every=5000, model=None):
+    model = unet.UNet().to(device) if model is None else model
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     data = data.to(device)
 
